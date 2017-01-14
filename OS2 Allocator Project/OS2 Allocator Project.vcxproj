@@ -19,10 +19,19 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="buddy.h" />
+    <ClInclude Include="list.h" />
+    <ClInclude Include="macros.h" />
+    <ClInclude Include="page.h" />
     <ClInclude Include="slab.h" />
+    <ClInclude Include="slabstruct.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="buddy.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="page.cpp" />
     <ClCompile Include="slab.cpp" />
+    <ClCompile Include="slabstruct.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5A2B33BB-2BA2-491C-B977-00DE66BB120D}</ProjectGuid>

@@ -1,8 +1,25 @@
 #pragma once
 #include <stdlib.h>
+#include "list.h"
 typedef struct kmem_cache_s kmem_cache_t;
-#define BLOCK_SIZE 4096
-#define CACHE_L1_LINE_SIZE 64
+#define BLOCK_SIZE (4096)
+#define CACHE_L1_LINE_SIZE (64)
+
+struct kmem_cache_s {
+	list_head slabs_full; //list of full slabs
+	list_head slabs_partial; //list of partially filled slabs
+	list_head slabs_free; //list of free slabs
+	size_t objsize; //size of object in slab
+	size_t num; //number of objects in each slab
+	size_t  gfporder; //size of the slab in blocks (each slab takes 2^gfporder blocks because of the buddy alloc)
+	size_t colour; //number of different offsets that can be used
+	size_t colour_next; //used for calculating offset in slab
+	void(*ctor)(void *); //constructor for the object
+	void(*dtor)(void *); //destructor for the object
+	char name[64]; //name of the cache
+	bool growing; //is the cache growing (used to see if cache can be shrunk)
+	list_head next; //next cache
+};
 
 void kmem_init(void *space, int block_num); 
 /*
