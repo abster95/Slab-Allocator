@@ -9,11 +9,11 @@ struct kmem_cache_s {
 	list_head slabs_full; //list of full slabs
 	list_head slabs_partial; //list of partially filled slabs
 	list_head slabs_free; //list of free slabs
-	size_t objsize; //size of object in slab
-	size_t num; //number of objects in each slab
-	size_t  gfporder; //size of the slab in blocks (each slab takes 2^gfporder blocks because of the buddy alloc)
-	size_t colour; //number of different offsets that can be used
-	size_t colour_next; //used for calculating offset in slab
+	unsigned long long objsize; //size of object in slab
+	unsigned long long num; //number of objects in each slab
+	unsigned long long  gfporder; //size of the slab in blocks (each slab takes 2^gfporder blocks because of the buddy alloc)
+	unsigned long long colour; //number of different offsets that can be used
+	unsigned long long colour_next; //used for calculating offset in slab
 	void(*ctor)(void *); //constructor for the object
 	void(*dtor)(void *); //destructor for the object
 	char name[64]; //name of the cache

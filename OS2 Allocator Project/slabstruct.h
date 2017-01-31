@@ -4,9 +4,9 @@
 #include "macros.h"
 typedef struct slab {
 	list_head list;
-	size_t inuse;//how many objects are currently in this slab
-	size_t free; //next free slot in slab
-	size_t colouroff; //colour offset for this slab
+	unsigned long long inuse;//how many objects are currently in this slab
+	unsigned long long free; //next free slot in slab
+	unsigned long long colouroff; //colour offset for this slab
 	void * s_mem; //where the slots start
 
 	void init(kmem_cache_t* cachep);

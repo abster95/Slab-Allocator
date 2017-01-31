@@ -15,33 +15,14 @@ using namespace std;
 static kmem_cache_t cache_cache;
 static kmem_cache_t* buffers[13];
 extern void* memory;
-extern page pagesBase[BLOCK_NUMBER];
+extern page* pagesBase;
 buddy* b;
 
 //in page struct next points to the cache and prev points to the slab that the page belongs
-void page_set_cache(page * pagep, kmem_cache_t *cachep) {
-	pagep->list.next = &cachep->next;
-}
 
-kmem_cache_t* page_get_cache(page* pagep) {
-	return list_entry(pagep->list.next, kmem_cache_t, next);
-}
-
-void page_set_slab(page * page, slab* slab) {
-	page->list.prev = &slab->list;
-}
-
-slab* page_get_slab(page* pagep) {
-	return list_entry(pagep->list.prev, slab, list);
-}
-
-page* virtual_to_page(void* vir) {
-	size_t index = ((unsigned long long) vir - (unsigned long long) memory) >> 12;
-	return &(pagesBase[index]);
-}
 
 void kmem_init(void * space, int block_num) {
-	b = new buddy(space, block_num);
+	b = new(space) buddy(space, block_num);
 	cache_cache = {
 		list_head(), //empty
 		list_head(), //empty
@@ -102,12 +83,13 @@ int kmem_cache_shrink(kmem_cache_t * cachep) {
 		cachep->growing = false;
 		return 0;
 	}
-	size_t cnt = 0;
-	while (cachep->slabs_free.next != &cachep->slabs_free) { //while there are free slabs
+	unsigned long long cnt = 0;
+	while (cachep->slabs_free.next != nullptr) { //while there are free slabs
 		slab* tmp = list_entry(cachep->slabs_free.next, slab, list);
 		tmp->list.prev->next = tmp->list.next;
-		tmp->list.next->prev = tmp->list.prev;
-		
+		if (tmp->list.next != nullptr) {
+			tmp->list.next->prev = tmp->list.prev;
+		}
 		void* adr;
 		if (cachep->objsize < (BLOCK_SIZE >> 3)) {
 			adr = tmp;
@@ -122,15 +104,20 @@ int kmem_cache_shrink(kmem_cache_t * cachep) {
 }
 
 void * kmem_cache_alloc(kmem_cache_t * cachep) {
+	if (cachep == nullptr) return nullptr; //ERROR
 	slab* tmp;
-	if (cachep->slabs_partial.next != &(cachep->slabs_partial)) { //if there's a partial slab first fill it
+	if (cachep->slabs_partial.next != nullptr) { //if there's a partial slab first fill it
 		tmp = list_entry(cachep->slabs_partial.next, slab, list);
 		cachep->slabs_partial.next = tmp->list.next;
-		tmp->list.next->prev = tmp->list.prev;
-	} else if (cachep->slabs_free.next != &(cachep->slabs_free)) {//else, check if there are any free slabs and fill them
+		if (tmp->list.next != nullptr) {
+			tmp->list.next->prev = tmp->list.prev;
+		}
+	} else if (cachep->slabs_free.next != nullptr) {//else, check if there are any free slabs and fill them
 		tmp = list_entry(cachep->slabs_free.next, slab, list);
 		cachep->slabs_free.next = tmp->list.next;
-		tmp->list.next->prev = tmp->list.prev;
+		if (tmp->list.next != nullptr) {
+			tmp->list.next->prev = tmp->list.prev;
+		}
 	} else {//we need to alloc a new slab from buddy
 		void* adr = b->kmem_getpages(cachep->gfporder);
 		if (cachep->objsize < (BLOCK_SIZE >> 3)) { //if objsize is an eight of BLOCK_SIZE we store slab descriptor on the slab
@@ -145,11 +132,11 @@ void * kmem_cache_alloc(kmem_cache_t * cachep) {
 				exit(1);
 			}
 		}
-		size_t index = ((unsigned long long) adr - (unsigned long long) memory) >> 12;
+		unsigned long long index = ((unsigned long long) adr - (unsigned long long) memory) >> (unsigned long long) log2(BLOCK_SIZE);
 		page* pagep = &pagesBase[index];
 		for (int i = 0; i < (1 << cachep->gfporder); i++) {
-			page_set_cache(&pagep[i], cachep);
-			page_set_slab(&pagep[i], tmp);
+			page::set_cache(&pagep[i], cachep);
+			page::set_slab(&pagep[i], tmp);
 		}
 	}
 	
@@ -166,41 +153,46 @@ void * kmem_cache_alloc(kmem_cache_t * cachep) {
 	//update list
 	tmp->list.prev = toPut;
 	tmp->list.next = toPut->next;
-	toPut->next->prev = &tmp->list;
+	if (toPut->next != nullptr) {
+		toPut->next->prev = &tmp->list;
+	}
 	toPut->next = &tmp->list;
 
 	//set the flag for reaping
-	cachep->growing = 1;
+	cachep->growing = true;
 
 	return adr;
 }
 
 void kmem_cache_free(kmem_cache_t * cachep, void * objp) {
 	if (cachep == nullptr || objp == nullptr) return; //ERROR
-	slab* slabp = page_get_slab(virtual_to_page(objp));
+	slab* slabp = page::get_slab(page::virtual_to_page(objp));
 	slabp->list.prev->next = slabp->list.next;
-	slabp->list.next->prev = slabp->list.prev;
-
-	size_t objNo = ((unsigned long long) objp - (unsigned long long) slabp->s_mem) / cachep->objsize;
+	if (slabp->list.next != nullptr) {
+		slabp->list.next->prev = slabp->list.prev;
+	}
+	unsigned long long objNo = ((unsigned long long) objp - (unsigned long long) slabp->s_mem) / cachep->objsize;
 	slab_buffer(slabp)[objNo] = slabp->free;
 	slabp->free = objNo;
 
 	slabp->inuse--;
 	list_head * toPut;
-	if (slabp->inuse > 0) {
+	if (slabp->inuse > 0) { //if there's still objects in slab return it to partial list
 		toPut = &cachep->slabs_partial;
-	} else {
+	} else { //else put it in free slabs
 		toPut = &cachep->slabs_free;
 	}
 
 	slabp->list.next = toPut->next;
 	slabp->list.prev = toPut;
-	toPut->next->prev = &slabp->list;
+	if (toPut->next) {
+		toPut->next->prev = &slabp->list;
+	}
 	toPut->next = &slabp->list;
 }
 
 void * kmalloc(size_t size) {
-	size_t min = 32;
+	unsigned long long min = 32;
 	for (int i = 0; i < 13; i++) {
 		if (size <= min << i) return kmem_cache_alloc(buffers[i]);
 	}
@@ -209,15 +201,15 @@ void * kmalloc(size_t size) {
 }
 
 void kfree(const void * objp) {
-	page* pagep = virtual_to_page((void*) objp);
-	kmem_cache_t* cachep = page_get_cache(pagep);
+	kmem_cache_t* cachep = page::get_cache(page::virtual_to_page((void*)objp));
 	kmem_cache_free(cachep, (void*)objp);
 }
 
-void kmem_cache_destroy(kmem_cache_t * cachep) {
-	if (cachep->slabs_full.next == &cachep->slabs_full && cachep->slabs_partial.next == &cachep->slabs_partial) {
+void kmem_cache_destroy(kmem_cache_t * cachep) { 
+	if (cachep == nullptr) return; //ERROR
+	if (cachep->slabs_full.next == nullptr && cachep->slabs_partial.next == nullptr) { // can only destroy if all the slabs are empty
 		cachep->growing = false;
-		kmem_cache_shrink(cachep);
+		kmem_cache_shrink(cachep); //return all the slabs to buddy
 		
 		//cachep->next.next->prev = cachep->next.prev;
 		//cachep->next.prev->next = cachep->next.next;
