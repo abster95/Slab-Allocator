@@ -7,7 +7,7 @@
 
 #define BLOCK_NUMBER (1000)
 #define THREAD_NUM (5)
-#define ITERATIONS (8000)
+#define ITERATIONS (1000)
 
 #define shared_size (7)
 
@@ -43,10 +43,16 @@ int work(struct data_s data) {
 	for (int i = 0; i < data.iterations; i++) {
 		if (i % 100 == 0) {
 			objs[size].data = kmem_cache_alloc(data.shared);
+		//	if (kmem_cache_error(data.shared)) { 
+		//		std::terminate();
+		//	}
 			objs[size].cache = data.shared;
 			assert(check(objs[size].data, shared_size));
 		} else {
 			objs[size].data = kmem_cache_alloc(cache);
+			//if (kmem_cache_error(cache)) {
+			//	std::terminate();
+			//}
 			objs[size].cache = cache;
 			memset(objs[size].data, MASK, data.id);
 		}

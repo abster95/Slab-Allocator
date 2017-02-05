@@ -32,7 +32,7 @@ static void init_cache() {
 	cache_cache.colour_next = 0;
 	cache_cache.ctor = nullptr;
 	cache_cache.dtor = nullptr;
-	strcpy_s(cache_cache.name, "cache_cache\0");
+	sprintf_s(cache_cache.name, "cache_cache\0");
 	cache_cache.growing = false;
 	cache_cache.next.list_init();
 	new(&cache_cache.spinlock) recursive_mutex();
@@ -68,16 +68,16 @@ kmem_cache_t * kmem_cache_create(const char * name, size_t size, void(*ctor)(voi
 	cachep->slabs_full.list_init();
 	cachep->slabs_partial.list_init();
 	if (strlen(name) < 63) {
-		strcpy_s(cachep->name, name);
+		sprintf_s(cachep->name, name);
 	} else {
 		cachep->err.occured = true;
-		strcpy_s(cachep->err.function, "Cache name too long");
+		sprintf_s(cachep->err.function, "Cache name too long");
 		exit(1);
 	}
 	int i = 0;
 	while ((BLOCK_SIZE << i) < size) i++;
 	cachep->gfporder = i;
-	if (size < (BLOCK_SIZE >> 3)) {
+	if (size < (BLOCK_SIZE/8)) {
 		cachep->num = ((BLOCK_SIZE - sizeof(slab)) / (size + sizeof(unsigned int)));
 		cachep->colour = ((BLOCK_SIZE - sizeof(slab)) % (size + sizeof(unsigned int))) / 64 + 1;
 	} else {
@@ -114,7 +114,7 @@ int kmem_cache_shrink(kmem_cache_t * cachep) {
 			tmp->list.next->prev = tmp->list.prev;
 		}
 		void* adr;
-		if (cachep->objsize < (BLOCK_SIZE >> 3)) {
+		if (cachep->objsize < (BLOCK_SIZE/8)) {
 			adr = tmp;
 		} else {
 			adr = (void*)((unsigned long long)(tmp->s_mem) - tmp->colouroff);
@@ -148,10 +148,10 @@ void * kmem_cache_alloc(kmem_cache_t * cachep) {
 		void* adr = bud->kmem_getpages(cachep->gfporder);
 		if (adr == nullptr) {
 			cachep->err.occured = true;
-			strcpy_s(cachep->err.function, __func__);
+			sprintf_s(cachep->err.function, "kmem_cache_alloc\0");
 			return nullptr;
 		}
-		if (cachep->objsize < (BLOCK_SIZE >> 3)) { //if objsize is an eight of BLOCK_SIZE we store slab descriptor on the slab
+		if (cachep->objsize < (BLOCK_SIZE/8)) { //if objsize is an eight of BLOCK_SIZE we store slab descriptor on the slab
 			tmp = (slab*)adr;
 			tmp->init(cachep);	
 		} else {// else put it in a buffer
@@ -159,25 +159,25 @@ void * kmem_cache_alloc(kmem_cache_t * cachep) {
 			if (tmp == nullptr) {
 				bud->kmem_freepages(adr, cachep->gfporder);
 				cachep->err.occured = true;
-				strcpy_s(cachep->err.function, __func__);
+				sprintf_s(cachep->err.function, "kmem_cache_alloc\0");
 				return nullptr;
 			}
 			if (cachep->num <= 8) {
 				tmp->init(cachep, adr);
 			} else {
 				cachep->err.occured = true;
-				strcpy_s(cachep->err.function, "FATAL ERROR!\0");
+				sprintf_s(cachep->err.function, "FATAL ERROR!\0");
 				exit(1);
 			}
 		}
 		unsigned long long index = ((unsigned long long) adr - (unsigned long long) (bud->space)) >> (unsigned long long) log2(BLOCK_SIZE);
 		if (index >= bud->usable) {
-			if (cachep->objsize > BLOCK_SIZE >> 3) {
+			if (cachep->objsize > BLOCK_SIZE/8) {
 				kfree(tmp);
 			}
 			bud->kmem_freepages(adr, cachep->gfporder);
 			cachep->err.occured = true;
-			strcpy_s(cachep->err.function, __func__);
+			sprintf_s(cachep->err.function, __func__);
 			return nullptr;
 		}
 		page* pagep = &((bud->pagesBase)[index]);
@@ -190,10 +190,10 @@ void * kmem_cache_alloc(kmem_cache_t * cachep) {
 	
 	void* objp = (void*)((unsigned long long) tmp->s_mem + tmp->free*cachep->objsize);
 	tmp->free = slab_buffer(tmp)[tmp->free];
-	tmp->inuse++;
+	tmp->objCnt++;
 	cachep->objCnt++;
 	list_head* toPut;
-	if ((tmp->inuse < cachep->num) && tmp->free != ~0) { //if slab is partialy filled put it back in partial
+	if ((tmp->objCnt < cachep->num) && tmp->free != ~0) { //if slab is partialy filled put it back in partial
 		toPut = &cachep->slabs_partial;
 	} else {//else put it back in full
 		toPut = &cachep->slabs_full;
@@ -219,14 +219,14 @@ void kmem_cache_free(kmem_cache_t * cachep, void * objp) {
 	} //ERROR
 	if (objp == nullptr) {
 		cachep->err.occured = true;
-		strcpy_s(cachep->err.function, __func__);
+		sprintf_s(cachep->err.function, "kmem_cache_free\0");
 		return;
 	}
 	lock_guard<recursive_mutex> guard(cachep->spinlock);
 	slab* slabp = page::get_slab(page::virtual_to_page(objp));
 	if (slabp == nullptr || ((unsigned long long)slabp > (unsigned long long) bud->space + bud->usable*BLOCK_SIZE) || (unsigned long long)slabp < (unsigned long long)bud->space ) {
 		cachep->err.occured = true;
-		strcpy_s(cachep->err.function, __func__);
+		sprintf_s(cachep->err.function, "kmem_cache_free\0");
 		return;
 	}
 	if (cachep->dtor != nullptr) {
@@ -240,10 +240,10 @@ void kmem_cache_free(kmem_cache_t * cachep, void * objp) {
 	slab_buffer(slabp)[objNo] = (unsigned int) slabp->free;
 	slabp->free = objNo;
 
-	slabp->inuse--;
+	slabp->objCnt--;
 	cachep->objCnt--;
 	list_head * toPut;
-	if (slabp->inuse > 0) { //if there's still objects in slab return it to partial list
+	if (slabp->objCnt > 0) { //if there's still objects in slab return it to partial list
 		toPut = &cachep->slabs_partial;
 	} else { //else put it in free slabs
 		toPut = &cachep->slabs_free;
@@ -305,6 +305,7 @@ int kmem_cache_error(kmem_cache_t * cachep) {
 		lock_guard<recursive_mutex> guard(cachep->spinlock);
 		if (cachep->err.occured) {
 			printf_s("ERROR IN FUNCTION: %s\n", cachep->err.function);
+			//cachep->err.occured = false;
 		}
 		return 1;
 	}

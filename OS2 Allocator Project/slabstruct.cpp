@@ -3,7 +3,7 @@
 void slab::init(kmem_cache_t * cachep, void* buf) {
 	if (cachep == nullptr) return; //ERROR
 	free = 0;
-	inuse = 0;
+	objCnt = 0;
 	list.list_init();
 	colouroff = CACHE_L1_LINE_SIZE * cachep->colour_next;
 	cachep->colour_next = (cachep->colour_next + 1) % cachep->colour;
