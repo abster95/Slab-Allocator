@@ -1,6 +1,7 @@
 #include "slabstruct.h"
 
-void slab::init(kmem_cache_t * cachep) {
+void slab::init(kmem_cache_t * cachep, void* buf) {
+	if (cachep == nullptr) return; //ERROR
 	free = 0;
 	inuse = 0;
 	list.list_init();
@@ -9,8 +10,12 @@ void slab::init(kmem_cache_t * cachep) {
 	for (int i = 0; i < cachep->num; i++) { //initialize every slot as free by making previous point to the next
 		slab_buffer(this)[i] = i + 1;
 	}
-	slab_buffer(this)[cachep->num - 1] = BUFCTL_END; //last slot in the slab doesn't have any after it
-	s_mem = (void*)((unsigned long long)(&(slab_buffer(this)[cachep->num])) + colouroff); // the slots start after the descriptor and the array
+	slab_buffer(this)[cachep->num - 1] = ~0; //last slot in the slab doesn't have any after it
+	if (buf == nullptr) {
+		s_mem = (void*)((unsigned long long)(&(slab_buffer(this)[cachep->num])) + colouroff); // the slots start after the descriptor and the array
+	} else {
+		s_mem = (void*)((unsigned long long)buf + colouroff);
+	}
 	if (cachep->ctor != nullptr) { //if there's a constructor, initialize objects
 		for (int i = 0; i < cachep->num; i++) {
 			cachep->ctor((void*)((unsigned long long) s_mem + i * cachep->objsize));
@@ -18,7 +23,7 @@ void slab::init(kmem_cache_t * cachep) {
 	}
 }
 
-void slab::initBig(kmem_cache_t * cachep, void * buf) {
+/*void slab::initBig(kmem_cache_t * cachep, void * buf) {
 	free = 0;
 	inuse = 0;
 	list.list_init();
@@ -34,4 +39,4 @@ void slab::initBig(kmem_cache_t * cachep, void * buf) {
 			cachep->ctor((void*)((unsigned long long) s_mem + i * cachep->objsize));
 		}
 	}
-}
+}*/

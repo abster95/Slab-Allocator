@@ -2,6 +2,9 @@
 #include "slab.h"
 #include "list.h"
 #include "macros.h"
+
+
+
 typedef struct slab {
 	list_head list;
 	unsigned long long inuse;//how many objects are currently in this slab
@@ -9,7 +12,7 @@ typedef struct slab {
 	unsigned long long colouroff; //colour offset for this slab
 	void * s_mem; //where the slots start
 
-	void init(kmem_cache_t* cachep);
-	void initBig(kmem_cache_t* cachep, void* buf);
+	void init(kmem_cache_t* cachep, void* buf = nullptr);
+	//void initBig(kmem_cache_t* cachep, void* buf);
 
 }slab;

@@ -20,11 +20,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buddy.h" />
+    <ClInclude Include="error.h" />
     <ClInclude Include="list.h" />
     <ClInclude Include="macros.h" />
     <ClInclude Include="page.h" />
     <ClInclude Include="slab.h" />
     <ClInclude Include="slabstruct.h" />
+    <ClInclude Include="test.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="buddy.cpp" />
@@ -32,6 +34,7 @@
     <ClCompile Include="page.cpp" />
     <ClCompile Include="slab.cpp" />
     <ClCompile Include="slabstruct.cpp" />
+    <ClCompile Include="test.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5A2B33BB-2BA2-491C-B977-00DE66BB120D}</ProjectGuid>

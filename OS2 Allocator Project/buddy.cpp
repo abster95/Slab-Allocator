@@ -6,56 +6,41 @@
 #include <iostream>
 using namespace std;
 
-void* memory;
-page* pagesBase;
+//page* pagesBase;
 
 buddy::buddy(void * space, unsigned long long size) {
-	//this->maxBlock = (int)log2(size-1) + 1;
-	//unsigned long long neededSpace = (sizeof(buddy) + sizeof(page) * (size - 1) + sizeof(list_head) * maxBlock) / BLOCK_SIZE + 1;
-	
-	// //take up 2 blocks just in case
-	//size -= 2;
+	new(&this->spinlock) recursive_mutex();
 	int neededSpace = 1;
 	while ((sizeof(buddy) + sizeof(page) * (size - neededSpace) + sizeof(list_head) * ((int)log2(size - neededSpace)+1)) > BLOCK_SIZE*neededSpace) {
 		neededSpace++;
 	}
 	size -= neededSpace;
 	this->usable = (int)size;
-	memory = (void*)((unsigned long long)space + neededSpace * BLOCK_SIZE);
-	pagesBase = new((void*)((unsigned long long)space + sizeof(buddy))) page[size];
+	this->space = (void*)((unsigned long long)space + neededSpace * BLOCK_SIZE);
+	this->pagesBase = new((void*)((unsigned long long)space + sizeof(buddy))) page[size];
 	for (int i = 0; i < size; i++) {
 		pagesBase[i].init_page();
 	}
-	this->space = memory;
 	this->maxBlock = (int)log2(size) + 1;
-	void * tmp = memory;
+	void * tmp = this->space;
 	
 	this->avail = new((void*)((unsigned long long)space + sizeof(buddy) + sizeof(page) * (size))) list_head[maxBlock];
 	for (int i = maxBlock - 1; i >= 0; i--) {
-		avail[i].list_init();
 		if ((size >> i ) &1) {
 			avail[i].next = avail[i].prev = (list_head*)tmp;
-			unsigned long long index = ((unsigned long long) tmp - (unsigned long long) memory) >> (unsigned long long)log2(BLOCK_SIZE);
+			unsigned long long index = ((unsigned long long) tmp - (unsigned long long) (this->space)) >> (unsigned long long)log2(BLOCK_SIZE);
 			pagesBase[index].order = i;
 			((list_head*)tmp)->next = nullptr;
 			((list_head*)tmp)->prev = &(avail[i]);
-			cout << exp2(i) << " blok te velicine je stavljlen na adresu: " << hex << (unsigned long long) tmp <<endl;
 			tmp = (void*)((unsigned long long) tmp + (BLOCK_SIZE << i));
-		}
-	}
-	for (int i = 0; i < maxBlock; i++) {
-		cout << "Nivo: " << i;
-		if (avail[i].next != nullptr) {
-			cout << " Krece na adresi: " << hex << (unsigned long long) avail[i].next << endl;
-		} else {
-			cout << endl;
 		}
 	}
 }
 
 void * buddy::kmem_getpages(unsigned long long order) {
-	if (order < 0 || order > maxBlock) return 0; //ERROR
-	int bestAvail = order;
+	if (order < 0 || order > maxBlock) return nullptr; //ERROR
+	lock_guard<recursive_mutex> guard(spinlock);
+	unsigned long long bestAvail = order;
 	while ((bestAvail < maxBlock) && ((avail[bestAvail].next) == nullptr)) {
 		bestAvail++; //try to find best fit
 	}
@@ -68,7 +53,7 @@ void * buddy::kmem_getpages(unsigned long long order) {
 	if (tmp != nullptr) {
 		tmp->prev = &avail[bestAvail];
 	}
-	unsigned long long index = ((unsigned long long) ret - (unsigned long long) memory) >> (unsigned long long) log2(BLOCK_SIZE);
+	unsigned long long index = ((unsigned long long) ret - (unsigned long long) (this->space)) >> (unsigned long long) log2(BLOCK_SIZE);
 	pagesBase[index].order = ~0; //so we know that this is now taken
 
 	while (bestAvail > order) { //if we split higher order blocks to get the one we need
@@ -77,30 +62,21 @@ void * buddy::kmem_getpages(unsigned long long order) {
 		tmp->next = nullptr;
 		tmp->prev = &avail[bestAvail]; //avail[bestAvail] is surely empty, so we can put tmp at the begining
 		avail[bestAvail].next = avail[bestAvail].prev = tmp;
-		index = ((unsigned long long) tmp - (unsigned long long) memory) >> (unsigned long long) log2(BLOCK_SIZE);
-		pagesBase[index].order = bestAvail;
-	}
-	cout << "Novo stanje nakon alokacije bloka: " << endl;
-	for (int i = 0; i < maxBlock; i++) {
-		cout << "Nivo: " << i;
-		if (avail[i].next != nullptr) {
-			cout << " Krece na adresi: " << hex << (unsigned long long) avail[i].next << endl;
-		} else {
-			cout << endl;
-		}
+		index = ((unsigned long long) tmp - (unsigned long long) (this->space)) >> (unsigned long long) log2(BLOCK_SIZE);
+		pagesBase[index].order = (unsigned int) bestAvail;
 	}
 	return (void*)ret;
 }
 
-int buddy::kmem_freepages(void * space, unsigned long long order) {
-	if( order < 0 || order > maxBlock || space == nullptr ) return 0; //ERROR
+int buddy::kmem_freepages(void * from, unsigned long long order) {
+	if( order < 0 || order > maxBlock || from == nullptr ) return 0; //ERROR
+	lock_guard<recursive_mutex> guard(spinlock);
 	list_head* tmp;
 	while (true) { //while there's buddys to join
 		unsigned long long mask = BLOCK_SIZE << order; // mask to figure out the buddy
-		tmp = (list_head*)((unsigned long long) memory + (((unsigned long long) space - (unsigned long long) memory) ^ mask)); //find the adress of space's buddy
-		unsigned long long index = ((unsigned long long)tmp - (unsigned long long) memory) >> (unsigned long long) log2(BLOCK_SIZE); //page with this index will tell us if the buddy is free or taken (sort of like a map)
-		if (index >= BLOCK_NUMBER) {
-			cout << "Taj buddy uopste ne postoji u memoriji(nije ni alociran ni free)" << endl;
+		tmp = (list_head*)((unsigned long long) (this->space) + (((unsigned long long) from - (unsigned long long) (this->space)) ^ mask)); //find the adress of space's buddy
+		unsigned long long index = ((unsigned long long)tmp - (unsigned long long) (this->space)) >> (unsigned long long) log2(BLOCK_SIZE); //page with this index will tell us if the buddy is free or taken (sort of like a map)
+		if (index >= usable) {
 			break;
 		}
 		if (tmp != nullptr && pagesBase[index].order == order) { //if the buddy's free
@@ -110,8 +86,8 @@ int buddy::kmem_freepages(void * space, unsigned long long order) {
 			}
 			pagesBase[index].order = ~0; //the page isn't currently in the buddy free list
 			order++; // to check for higher orders
-			if ((void*)tmp < space) { //if the found buddy comes before  given buddy
-				space = (void*)tmp;//adjust
+			if ((void*)tmp < from) { //if the found buddy comes before  given buddy
+				from = (void*)tmp;//adjust
 			}
 		} else {
 			break;
@@ -119,24 +95,14 @@ int buddy::kmem_freepages(void * space, unsigned long long order) {
 	}
 	//put in available list
 	tmp = avail[order].next;
-	((list_head*)space)->next = tmp;
+	((list_head*)from)->next = tmp;
 	if (tmp != nullptr) {
-		tmp->prev = (list_head*)space;
+		tmp->prev = (list_head*)from;
 	}
-	((list_head*)space)->prev = &avail[order];
-	avail[order].next = (list_head*)space;
-	unsigned long long index = ((unsigned long long)space - (unsigned long long)memory) >> (unsigned long long) log2(BLOCK_SIZE);
-	pagesBase[index].order = order; //from this page on it's free for 2^order
-
-	for (int i = 0; i < maxBlock; i++) {
-		cout << "Nivo: " << i;
-		if (avail[i].next != nullptr) {
-			cout << " Krece na adresi: " << hex << (unsigned long long) avail[i].next << endl;
-		} else {
-			cout << endl;
-		}
-	}
-
+	((list_head*)from)->prev = &avail[order];
+	avail[order].next = (list_head*)from;
+	unsigned long long index = ((unsigned long long)from - (unsigned long long)(this->space)) >> (unsigned long long) log2(BLOCK_SIZE);
+	pagesBase[index].order = (unsigned int) order; //from this page on it's free for 2^order
 	return 1;
 	
 }
