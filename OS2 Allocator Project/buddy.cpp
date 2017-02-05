@@ -6,7 +6,6 @@
 #include <iostream>
 using namespace std;
 
-//page* pagesBase;
 
 buddy::buddy(void * space, unsigned long long size) {
 	new(&this->spinlock) recursive_mutex();

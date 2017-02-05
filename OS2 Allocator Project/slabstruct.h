@@ -3,7 +3,7 @@
 #include "list.h"
 #include "macros.h"
 
-
+typedef struct kmem_cache_s kmem_cache_t;
 
 typedef struct slab {
 	list_head list;
@@ -13,6 +13,5 @@ typedef struct slab {
 	void * s_mem; //where the slots start
 
 	void init(kmem_cache_t* cachep, void* buf = nullptr);
-	//void initBig(kmem_cache_t* cachep, void* buf);
 
 }slab;

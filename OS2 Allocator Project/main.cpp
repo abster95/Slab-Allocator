@@ -7,7 +7,7 @@
 
 #define BLOCK_NUMBER (1000)
 #define THREAD_NUM (5)
-#define ITERATIONS (1000)
+#define ITERATIONS (8000)
 
 #define shared_size (7)
 

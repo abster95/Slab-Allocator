@@ -7,8 +7,10 @@
 #include <cmath>
 
 
+typedef struct kmem_cache_s kmem_cache_t;
+typedef struct slab slab;
 
-
+//in page struct next points to the cache and prev points to the slab that the page belongs
 typedef struct page {
 	list_head list;
 	unsigned int order;

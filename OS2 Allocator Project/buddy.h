@@ -4,6 +4,8 @@
 #include <mutex>
 using namespace std;
 
+typedef struct page page;
+
 typedef struct buddy {
 	void * space; //memory on witch buddy operates
 	int maxBlock; //2^maxBlock pages are in the biggest block

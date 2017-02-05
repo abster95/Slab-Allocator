@@ -1,6 +1,6 @@
 #include "page.h"
 
-extern buddy * bud;
+extern struct buddy * bud;
 
 void page::init_page() {
 	list.list_init();

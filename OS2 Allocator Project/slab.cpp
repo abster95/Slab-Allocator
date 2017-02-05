@@ -17,7 +17,6 @@ using namespace std;
 
 static kmem_cache_t cache_cache;
 static kmem_cache_t* buffers[13];
-//extern page* pagesBase;
 buddy* bud;
 
 static void init_cache() {
@@ -39,42 +38,11 @@ static void init_cache() {
 	new(&cache_cache.spinlock) recursive_mutex();
 }
 
-//in page struct next points to the cache and prev points to the slab that the page belongs
+
 
 
 void kmem_init(void * space, int block_num) {
-	//error::occured = false;
 	bud = new(space) buddy(space, block_num);
-	/*cache_cache = {
-		list_head(), //empty
-		list_head(), //empty
-		list_head(), //empty
-		sizeof(kmem_cache_t), //how big is the object
-		((BLOCK_SIZE - sizeof(slab)) / (sizeof(kmem_cache_t) + sizeof(unsigned int))), //calculate how much can fit on a block after reserving space for slab desc and an int for indexing
-		0, // one block is enough
-		((BLOCK_SIZE - sizeof(slab)) % (sizeof(kmem_cache_t) + sizeof(unsigned int))) / 64 + 1, //calculate how many offsets
-		0,
-		nullptr,
-		nullptr,
-		"cache_cache\0",
-		false,
-		list_head()
-	};
-	cache_cache.slabs_free.list_init();
-	cache_cache.slabs_partial.list_init();
-	cache_cache.slabs_full.list_init();
-	cache_cache.objsize = sizeof(kmem_cache_t);
-	cache_cache.num = ((BLOCK_SIZE - sizeof(slab)) / (sizeof(kmem_cache_t) + sizeof(unsigned int))); //calculate how much can fit on a block after reserving space for slab desc and an int for indexing
-	cache_cache.gfporder = 0;
-	cache_cache.colour = ((BLOCK_SIZE - sizeof(slab)) % (sizeof(kmem_cache_t) + sizeof(unsigned int))) / 64 + 1; //calculate how many offsets
-	cache_cache.colour_next = 0;
-	cache_cache.ctor = nullptr;
-	cache_cache.dtor = nullptr;
-	strcpy(cache_cache.name, "cache_cache\0");
-	cache_cache.growing = false;
-	cache_cache.next.list_init();
-	new(&cache_cache.spinlock) recursive_mutex();
-	*/
 	init_cache();
 	for (int i = 0; i < 13; i++) {
 		char name[32];
